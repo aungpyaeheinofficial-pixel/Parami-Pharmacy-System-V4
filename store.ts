@@ -1,4 +1,6 @@
+
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { 
   CartItem, Product, User, Role, Transaction, Customer, Branch, 
   DistributionOrder, PurchaseOrder, Expense, Payable, Receivable, Supplier, AppSettings
@@ -7,6 +9,7 @@ import {
   mockProducts, mockUsers, mockTransactions, mockCustomers, 
   mockDistributionOrders, mockPurchaseOrders, mockExpenses, mockPayables, mockReceivables, mockSuppliers 
 } from './data';
+import { GS1ParsedData } from './utils/gs1Parser';
 
 // --- Shared Helper for Persistence ---
 const getInitialBranchId = () => {
@@ -615,3 +618,31 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     settings: { ...state.settings, ...updates }
   })),
 }));
+
+// --- Scanner History Store (Persisted) ---
+export interface ScanRecord extends GS1ParsedData {
+    id: string;
+    timestamp: number;
+    userName?: string;
+}
+
+interface ScannerState {
+    history: ScanRecord[];
+    addToHistory: (record: ScanRecord) => void;
+    clearHistory: () => void;
+}
+
+export const useScannerStore = create<ScannerState>()(
+    persist(
+        (set) => ({
+            history: [],
+            addToHistory: (record) => set((state) => ({ 
+                history: [record, ...state.history].slice(0, 1000) // Keep last 1000 scans
+            })),
+            clearHistory: () => set({ history: [] })
+        }),
+        {
+            name: 'scanner-history',
+        }
+    )
+);
