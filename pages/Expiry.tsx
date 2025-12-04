@@ -14,16 +14,20 @@ interface ExpiryItem {
 
 const Expiry = () => {
   // Ensure we use the live products from the store
-  const { products } = useProductStore();
+  const { products, removeBatchStock } = useProductStore();
   const [activeTab, setActiveTab] = useState('CRITICAL');
 
   // Calculate expiry data
   const expiryItems: ExpiryItem[] = useMemo(() => {
     const items: ExpiryItem[] = [];
     const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize today to midnight for accuracy
 
     products.forEach(product => {
       product.batches.forEach(batch => {
+        // Skip batches with 0 quantity
+        if (batch.quantity <= 0) return;
+
         const expiryDate = new Date(batch.expiryDate);
         const diffTime = expiryDate.getTime() - today.getTime();
         const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -59,6 +63,16 @@ const Expiry = () => {
       case 'WATCH': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
       default: return 'text-emerald-600 bg-emerald-50 border-emerald-200';
     }
+  };
+
+  const handleAction = (item: ExpiryItem, action: 'WRITEOFF' | 'RETURN') => {
+      const confirmed = window.confirm(
+          `Are you sure you want to ${action === 'WRITEOFF' ? 'write-off' : 'return'} this batch of ${item.product.nameEn}? \n\nQuantity: ${item.batch.quantity}`
+      );
+      
+      if (confirmed) {
+          removeBatchStock(item.product.id, item.batch.batchNumber, item.batch.quantity, action);
+      }
   };
 
   return (
@@ -213,10 +227,16 @@ const Expiry = () => {
                        <div className="flex gap-2">
                          {item.status === 'CRITICAL' ? (
                            <>
-                            <button className="flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-medium hover:bg-red-200 transition-colors">
+                            <button 
+                                onClick={() => handleAction(item, 'WRITEOFF')}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-medium hover:bg-red-200 transition-colors"
+                            >
                                <Trash2 size={14} /> Write-off
                             </button>
-                            <button className="flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors">
+                            <button 
+                                onClick={() => handleAction(item, 'RETURN')}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors"
+                            >
                                <Truck size={14} /> Return
                             </button>
                            </>

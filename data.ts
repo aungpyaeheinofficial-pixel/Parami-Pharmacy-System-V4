@@ -1,4 +1,3 @@
-
 import { Product, Role, User, Customer, Transaction, DistributionOrder, PurchaseOrder, Expense, Payable, Receivable, Supplier } from './types';
 
 // Branches
@@ -47,6 +46,7 @@ export const mockProducts: Product[] = [
     minStockLevel: 50,
     requiresPrescription: false,
     branchId: 'b1',
+    unit: 'STRIP',
     batches: [
       { id: 'batch1', batchNumber: 'B001', expiryDate: '2025-12-31', quantity: 100, costPrice: 300 },
       { id: 'batch2', batchNumber: 'B002', expiryDate: '2024-06-30', quantity: 50, costPrice: 320 }
@@ -67,6 +67,7 @@ export const mockProducts: Product[] = [
     minStockLevel: 30,
     requiresPrescription: true,
     branchId: 'b1',
+    unit: 'STRIP',
     batches: [
       { id: 'batch3', batchNumber: 'B003', expiryDate: '2024-03-15', quantity: 20, costPrice: 1000 }
     ]
@@ -84,6 +85,7 @@ export const mockProducts: Product[] = [
     minStockLevel: 20,
     requiresPrescription: false,
     branchId: 'b2',
+    unit: 'BOTTLE',
     batches: [
         { id: 'batch4', batchNumber: 'B004', expiryDate: '2026-01-01', quantity: 200, costPrice: 2000 }
     ]
@@ -102,6 +104,7 @@ export const mockProducts: Product[] = [
     minStockLevel: 25,
     requiresPrescription: false,
     branchId: 'b1',
+    unit: 'STRIP',
     batches: [
         { id: 'batch5', batchNumber: 'B005', expiryDate: '2024-02-28', quantity: 10, costPrice: 500 }
     ]

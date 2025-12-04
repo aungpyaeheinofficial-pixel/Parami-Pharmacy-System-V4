@@ -1,60 +1,11 @@
+
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Minus, Trash2, User, CreditCard, Banknote, QrCode, RotateCcw, Save, ShoppingCart, ScanLine, Image as ImageIcon, CheckCircle, AlertCircle, X, Check } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, User, CreditCard, Banknote, QrCode, RotateCcw, Save, ShoppingCart, ScanLine, Image as ImageIcon, CheckCircle, AlertCircle, X, Check, Lock, AlertTriangle, Package } from 'lucide-react';
 import { useCartStore, useProductStore, useTransactionStore, useCustomerStore, useBranchStore } from '../store';
 import { Button, Input, Badge } from '../components/UI';
-import { Product, Transaction } from '../types';
+import { Product, Transaction, UNIT_TYPES } from '../types';
 import CameraScanner from '../components/CameraScanner';
-
-// --- GS1 Parser Utilities ---
-
-const convertYYMMDDtoDate = (yymmdd: string) => {
-  const yy = parseInt(yymmdd.substring(0, 2));
-  const mm = yymmdd.substring(2, 4);
-  const dd = yymmdd.substring(4, 6);
-  // Assume 20xx for years 00-50, 19xx for 51-99
-  const yyyy = yy <= 50 ? 2000 + yy : 1900 + yy;
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-const parseGS1Barcode = (scannedData: string) => {
-  const result = {
-    gtin: null as string | null,
-    expiryDate: null as string | null,
-    batchNumber: null as string | null,
-    serialNumber: null as string | null
-  };
-  
-  let data = scannedData.replace(/^\]d2/, '').replace(/^\]C1/, '');
-  
-  if (data.includes('(')) {
-      const gtinMatch = data.match(/\(01\)(\d{14})|01(\d{14})/);
-      if (gtinMatch) result.gtin = gtinMatch[1] || gtinMatch[2];
-      
-      const expiryMatch = data.match(/\(17\)(\d{6})|17(\d{6})/);
-      if (expiryMatch) result.expiryDate = convertYYMMDDtoDate(expiryMatch[1] || expiryMatch[2]);
-      
-      const batchMatch = data.match(/\(10\)([^\(]*)|10([^\\x1D]*)/);
-      if (batchMatch) result.batchNumber = (batchMatch[1] || batchMatch[2]).trim();
-      
-      const serialMatch = data.match(/\(21\)([^\(]*)|21([^\\x1D]*)/);
-      if (serialMatch) result.serialNumber = (serialMatch[1] || serialMatch[2]).trim();
-  } else {
-      const gtinMatch = data.match(/01(\d{14})/);
-      if (gtinMatch) result.gtin = gtinMatch[1];
-      
-      const expiryMatch = data.match(/17(\d{6})/);
-      if (expiryMatch) result.expiryDate = convertYYMMDDtoDate(expiryMatch[1]);
-      
-      const batchMatch = data.match(/10([^\x1D]*)/);
-      if (batchMatch) result.batchNumber = batchMatch[1].trim();
-      
-      const serialMatch = data.match(/21([^\x1D]*)/);
-      if (serialMatch) result.serialNumber = serialMatch[1].trim();
-  }
-
-  return result;
-};
-
+import { parseBarcode, GS1ParsedData } from '../utils/gs1Parser';
 
 const ProductCard: React.FC<{ product: Product, onAdd: (p: Product) => void, index: number }> = ({ product, onAdd, index }) => (
   <div 
@@ -99,7 +50,7 @@ const ProductCard: React.FC<{ product: Product, onAdd: (p: Product) => void, ind
 
 const POS = () => {
   const { items, addItem, removeItem, updateQuantity, total, clearCart, customer, setCustomer } = useCartStore();
-  const { products } = useProductStore();
+  const { products, addProduct } = useProductStore();
   const { customers } = useCustomerStore();
   const { addTransaction } = useTransactionStore();
   const { currentBranchId } = useBranchStore();
@@ -110,10 +61,18 @@ const POS = () => {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   
-  // Scanned Feedback State
-  const [scannedInfo, setScannedInfo] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+  // Advanced Scan Handling State
+  const [notFoundScan, setNotFoundScan] = useState<GS1ParsedData | null>(null);
+  const [managerRequest, setManagerRequest] = useState<{
+    type: 'expired' | 'quick_add';
+    data: any;
+  } | null>(null);
+  const [managerCreds, setManagerCreds] = useState({ id: '', password: '' });
+  const [scannedInfo, setScannedInfo] = useState<{msg: string, type: 'success' | 'error' | 'warning'} | null>(null);
 
   const categories = ['All', 'Antibiotics', 'Analgesics', 'Vitamins', 'Supplements', 'Gastrointestinal', 'Diabetic'];
+
+  // --- Logic ---
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -128,57 +87,151 @@ const POS = () => {
     });
   }, [products, searchTerm, selectedCategory]);
 
-  const processBarcode = (code: string) => {
-       const gs1Data = parseGS1Barcode(code);
-       
-       if (gs1Data.gtin) {
-           const product = products.find(p => p.gtin === gs1Data.gtin);
-           if (product) {
-              let selectedBatchId = undefined;
-              let batchMsg = "";
-
-              if (gs1Data.batchNumber) {
-                 const batch = product.batches.find(b => b.batchNumber === gs1Data.batchNumber);
-                 if (batch) {
-                    selectedBatchId = batch.id;
-                    batchMsg = ` - Batch: ${batch.batchNumber}`;
-                 } else {
-                    batchMsg = ` - New Batch: ${gs1Data.batchNumber}`;
-                 }
-              }
-
-              addItem(product, selectedBatchId);
-              setSearchTerm('');
-              setScannedInfo({ 
-                 msg: `Scanned: ${product.nameEn}${batchMsg}`, 
-                 type: 'success' 
+  const handleManagerLogin = () => {
+      // Simulate Manager Verification (Hardcoded for demo)
+      if (managerCreds.id === 'admin' && managerCreds.password === '1234') {
+          if (managerRequest?.type === 'expired') {
+              // Proceed to add expired item with override
+              const { product, scanData } = managerRequest.data;
+              addItem(product, { 
+                  transactionData: {
+                      scanned_batch: scanData.batchNumber,
+                      scanned_expiry: scanData.expiryDate,
+                      scanned_serial: scanData.serialNumber,
+                      scanned_at: new Date().toISOString(),
+                      raw_barcode: scanData.rawData
+                  },
+                  warnings: ['EXPIRED'],
+                  override: true
               });
-              return true;
-           } else {
-              setScannedInfo({ msg: `Product with GTIN ${gs1Data.gtin} not found`, type: 'error' });
-              return false;
-           }
-       } else {
-          // Fallback search or add if exact match
-          // Look for SKU, ID, or GTIN (for simple barcodes)
-          const exactMatch = products.find(p => p.sku === code || p.id === code || p.gtin === code);
-          if (exactMatch) {
-             addItem(exactMatch);
-             setSearchTerm('');
-             setScannedInfo({ msg: `Added: ${exactMatch.nameEn}`, type: 'success' });
-             return true;
-          } else {
-             setScannedInfo({ msg: `Unknown barcode: ${code}`, type: 'error' });
-             return false;
+              setScannedInfo({ msg: `Approved: ${product.nameEn} (Expired)`, type: 'warning' });
+          } else if (managerRequest?.type === 'quick_add') {
+              // Handled by Quick Add logic, authorization just unlocks ability
           }
+          
+          // Clear states
+          setManagerRequest(null);
+          setManagerCreds({ id: '', password: '' });
+      } else {
+          alert('Invalid Credentials');
+      }
+  };
+
+  const processBarcode = (code: string) => {
+       const gs1Data = parseBarcode(code);
+       
+       let product = null;
+       
+       // 1. Search DB
+       if (gs1Data.gtin) {
+           product = products.find(p => p.gtin === gs1Data.gtin);
+       } 
+       
+       // Fallback search if GS1 parsing didn't find GTIN or product not found by GTIN
+       if (!product) {
+           // Try exact match on SKU or ID for linear barcodes
+           product = products.find(p => p.sku === code || p.id === code);
+           
+           // If we found via linear match, we might treat it as simple scan (no batch/expiry)
+           // unless the parser actually extracted some GS1 data but no GTIN (unlikely for valid GS1)
        }
+
+       if (product) {
+          // 2. Validate Expiry
+          let isExpired = false;
+          let isNearExpiry = false;
+          
+          if (gs1Data.expiryDate) {
+              const today = new Date();
+              const expiry = new Date(gs1Data.expiryDate);
+              const daysLeft = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+              
+              if (daysLeft < 0) isExpired = true;
+              else if (daysLeft < 30) isNearExpiry = true;
+          }
+
+          if (isExpired) {
+              // 3. Manager Approval Required
+              setManagerRequest({
+                  type: 'expired',
+                  data: { product, scanData: gs1Data }
+              });
+              return;
+          }
+
+          // 4. Add to Cart
+          const warnings = [];
+          if (isNearExpiry) warnings.push('NEAR_EXPIRY');
+
+          addItem(product, {
+              transactionData: {
+                  scanned_batch: gs1Data.batchNumber || null,
+                  scanned_expiry: gs1Data.expiryDate || null,
+                  scanned_serial: gs1Data.serialNumber || null,
+                  scanned_at: new Date().toISOString(),
+                  raw_barcode: code
+              },
+              warnings: warnings.length > 0 ? warnings : undefined
+          });
+
+          setSearchTerm('');
+          if (isNearExpiry) {
+             setScannedInfo({ msg: `Added: ${product.nameEn} (Expires soon!)`, type: 'warning' });
+          } else {
+             setScannedInfo({ msg: `Added: ${product.nameEn}`, type: 'success' });
+          }
+          return true;
+
+       } else {
+          // 5. Not Found Handling
+          setNotFoundScan(gs1Data);
+          setScannedInfo({ msg: `Product not found: ${gs1Data.gtin || code}`, type: 'error' });
+          return false;
+       }
+  };
+
+  const handleQuickAdd = (formData: any) => {
+      // Create temporary product
+      const newProduct: Product = {
+          id: `qp-${Date.now()}`,
+          nameEn: formData.name,
+          nameMm: formData.nameMm || formData.name,
+          category: formData.category,
+          price: parseFloat(formData.price),
+          stockLevel: 100, // Dummy stock
+          minStockLevel: 10,
+          sku: notFoundScan?.gtin || notFoundScan?.rawData || `SKU-${Date.now()}`,
+          gtin: notFoundScan?.gtin,
+          unit: formData.unit,
+          requiresPrescription: false,
+          image: '',
+          branchId: currentBranchId,
+          batches: []
+      };
+      
+      addProduct(newProduct);
+      
+      // Add to cart immediately
+      addItem(newProduct, {
+          transactionData: {
+              scanned_batch: notFoundScan?.batchNumber || null,
+              scanned_expiry: notFoundScan?.expiryDate || null,
+              scanned_serial: notFoundScan?.serialNumber || null,
+              scanned_at: new Date().toISOString(),
+              raw_barcode: notFoundScan?.rawData || ''
+          }
+      });
+      
+      setNotFoundScan(null);
+      setScannedInfo({ msg: `Quick Added: ${newProduct.nameEn}`, type: 'success' });
   };
 
   const handleScanInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchTerm) {
        processBarcode(searchTerm);
        setSearchTerm('');
-       setTimeout(() => setScannedInfo(null), 3000);
+       // Clear info after 3s unless it requires modal action
+       setTimeout(() => { if (!notFoundScan && !managerRequest) setScannedInfo(null) }, 3000);
     }
   };
 
@@ -203,12 +256,9 @@ const POS = () => {
     };
     
     addTransaction(newTransaction);
-    
     setPaymentModalOpen(false);
     clearCart();
-    
     setSuccessMsg('Transaction Completed Successfully!');
-    // Clear success message after 3 seconds
     setTimeout(() => setSuccessMsg(''), 3000);
   };
 
@@ -232,7 +282,7 @@ const POS = () => {
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
                 <input 
                   type="text" 
-                  placeholder="Search products or scan barcode..." 
+                  placeholder="Scan GS1 Barcode or Search..." 
                   className="w-full pl-12 pr-4 h-12 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm placeholder:text-slate-400"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -269,7 +319,9 @@ const POS = () => {
           {/* Scan Feedback */}
           {scannedInfo && (
              <div className={`p-3 rounded-xl text-sm flex items-center gap-2 animate-in slide-in-from-top-2 fade-in ${
-                scannedInfo.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'
+                scannedInfo.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 
+                scannedInfo.type === 'warning' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                'bg-red-50 text-red-700 border border-red-100'
              }`}>
                 {scannedInfo.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
                 {scannedInfo.msg}
@@ -329,10 +381,10 @@ const POS = () => {
          {/* Cart Items */}
          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/30">
             {items.map(item => (
-              <div key={item.cartId} className="flex gap-3 bg-white border border-slate-100 rounded-xl p-3 shadow-sm hover:border-blue-200 transition-all group relative animate-in slide-in-from-right-4 fade-in duration-300">
+              <div key={item.cartId} className={`flex gap-3 bg-white border rounded-xl p-3 shadow-sm hover:border-blue-200 transition-all group relative animate-in slide-in-from-right-4 fade-in duration-300 ${item.warning_flags?.includes('EXPIRED') ? 'border-red-300 bg-red-50/20' : 'border-slate-100'}`}>
                  <button 
                    onClick={() => removeItem(item.cartId)}
-                   className="absolute -top-2 -right-2 bg-white text-slate-400 hover:text-red-500 border border-slate-100 shadow-sm rounded-full p-1 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100"
+                   className="absolute -top-2 -right-2 bg-white text-slate-400 hover:text-red-500 border border-slate-100 shadow-sm rounded-full p-1 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 z-10"
                  >
                     <X size={14} />
                  </button>
@@ -344,9 +396,18 @@ const POS = () => {
                  <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
                     <div>
                         <h4 className="text-sm font-semibold text-slate-800 truncate pr-4 leading-tight">{item.nameEn}</h4>
-                        <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-slate-500">{item.price.toLocaleString()} Ks</span>
-                            {item.selectedBatchId && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 rounded border border-slate-200">Batch set</span>}
+                        <div className="flex flex-wrap gap-1 mt-1">
+                            {item.transaction_data?.scanned_batch && (
+                                <Badge variant="neutral" className="text-[10px] px-1 py-0">{item.transaction_data.scanned_batch}</Badge>
+                            )}
+                            {item.transaction_data?.scanned_expiry && (
+                                <Badge variant={item.warning_flags?.includes('EXPIRED') ? 'danger' : 'info'} className="text-[10px] px-1 py-0">
+                                    Exp: {item.transaction_data.scanned_expiry}
+                                </Badge>
+                            )}
+                            {item.manager_override && (
+                                <Badge variant="warning" className="text-[10px] px-1 py-0 flex gap-0.5"><Lock size={8}/> Override</Badge>
+                            )}
                         </div>
                     </div>
                     
@@ -452,11 +513,89 @@ const POS = () => {
          </div>
       )}
 
+      {/* Manager Approval Modal */}
+      {managerRequest && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 border-t-4 border-red-500">
+                  <div className="text-center mb-6">
+                      <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3 text-red-600">
+                          <Lock size={28} />
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-900">Manager Approval Required</h3>
+                      <p className="text-sm text-slate-500 mt-1">
+                          {managerRequest.type === 'expired' ? 'Authorized override for expired item.' : 'Authorized quick add for new product.'}
+                      </p>
+                  </div>
+                  
+                  <div className="space-y-3">
+                      <Input 
+                          placeholder="Manager ID" 
+                          value={managerCreds.id}
+                          onChange={(e: any) => setManagerCreds({...managerCreds, id: e.target.value})}
+                      />
+                      <Input 
+                          type="password"
+                          placeholder="Password" 
+                          value={managerCreds.password}
+                          onChange={(e: any) => setManagerCreds({...managerCreds, password: e.target.value})}
+                      />
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                      <Button variant="outline" className="flex-1" onClick={() => setManagerRequest(null)}>Cancel</Button>
+                      <Button variant="danger" className="flex-1" onClick={handleManagerLogin}>Authorize</Button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Product Not Found / Quick Add Modal */}
+      {notFoundScan && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 border-t-4 border-amber-500">
+                  <div className="text-center mb-6">
+                      <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3 text-amber-600">
+                          <AlertTriangle size={28} />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-900">Product Not Found</h3>
+                      <p className="font-mono text-sm bg-slate-100 py-1 px-2 rounded inline-block mt-2">{notFoundScan.gtin || notFoundScan.rawData}</p>
+                      <p className="text-sm text-slate-500 mt-2">
+                          This barcode is not in your inventory database. Would you like to quick-add it?
+                      </p>
+                  </div>
+
+                  {/* Quick Add Form */}
+                  <form onSubmit={(e) => {
+                      e.preventDefault();
+                      const formData = new FormData(e.target as HTMLFormElement);
+                      handleQuickAdd(Object.fromEntries(formData));
+                  }} className="space-y-3">
+                      <Input name="name" placeholder="Product Name (English)" required />
+                      <Input name="nameMm" placeholder="Product Name (Myanmar)" className="font-mm" />
+                      <div className="grid grid-cols-2 gap-3">
+                          <Input name="price" type="number" placeholder="Price (Ks)" required />
+                          <select name="unit" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl">
+                              {UNIT_TYPES.map(u => <option key={u.code} value={u.code}>{u.nameEn}</option>)}
+                          </select>
+                      </div>
+                      <select name="category" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl">
+                          {categories.filter(c => c!=='All').map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+
+                      <div className="flex gap-3 mt-6">
+                          <Button variant="outline" className="flex-1" type="button" onClick={() => setNotFoundScan(null)}>Cancel</Button>
+                          <Button variant="primary" className="flex-1" type="submit">Quick Add</Button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      )}
+
       {/* Scanner Modal */}
       {isScannerOpen && (
         <div className="fixed inset-0 bg-black z-50 flex flex-col animate-in fade-in duration-300">
            <div className="p-4 flex justify-between items-center text-white bg-black/50 backdrop-blur-md absolute top-0 left-0 right-0 z-10">
-              <span className="font-bold text-lg">Scan Barcode</span>
+              <span className="font-bold text-lg">Scan GS1 Barcode</span>
               <button onClick={() => setIsScannerOpen(false)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X size={24} /></button>
            </div>
            <div className="flex-1 bg-black relative flex items-center justify-center">
@@ -471,6 +610,11 @@ const POS = () => {
            </div>
            <div className="p-8 bg-slate-900 text-white text-center">
               <p className="text-sm font-medium opacity-80">Point camera at a barcode to scan</p>
+              <div className="flex justify-center gap-2 mt-2">
+                  <Badge variant="neutral" className="bg-white/10 border-0 text-white/70">GS1 DataMatrix</Badge>
+                  <Badge variant="neutral" className="bg-white/10 border-0 text-white/70">EAN-13</Badge>
+                  <Badge variant="neutral" className="bg-white/10 border-0 text-white/70">Code-128</Badge>
+              </div>
            </div>
         </div>
       )}

@@ -1,12 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+
+import React from 'react';
+import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, ShoppingCart, Package, Truck, 
   Users, BarChart3, Settings, LogOut, Menu, Bell, Search,
-  ChevronDown, HeartPulse, CreditCard, ShoppingBag,
-  Check, ScanLine, Building2, MapPin, X, Loader2
+  ChevronDown, HeartPulse, Building2, Check, X, ScanLine, Calendar, ShoppingBag, PlusCircle, Wrench
 } from 'lucide-react';
-import { useAuthStore, useGlobalStore, useBranchStore, useDistributionStore } from '../store';
+import { useAuthStore, useGlobalStore, useBranchStore } from '../store';
 
 const NavItem = ({ to, icon: Icon, label, subLabel }: { to: string, icon: any, label: string, subLabel?: string }) => (
   <NavLink 
@@ -36,6 +36,7 @@ const NavItem = ({ to, icon: Icon, label, subLabel }: { to: string, icon: any, l
 
 export const Sidebar = () => {
   const { isSidebarOpen, toggleSidebar } = useGlobalStore();
+  const { logout } = useAuthStore();
   
   return (
     <>
@@ -50,57 +51,72 @@ export const Sidebar = () => {
 
       {/* Sidebar Container */}
       <aside 
-        className={`w-[280px] bg-white border-r border-gray-200 h-screen flex flex-col fixed left-0 top-0 z-40 transition-transform duration-300 ease-in-out shadow-2xl shadow-gray-200/50 ${
+        className={`w-[280px] bg-white border-r border-gray-200 h-screen flex flex-col fixed left-0 top-0 z-40 transition-transform duration-300 ease-in-out shadow-2xl shadow-gray-200/50 md:shadow-none ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="p-6 pb-4 shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-[#C8000C] to-[#E01111] rounded-xl flex items-center justify-center text-white shadow-lg shadow-red-500/30 transform rotate-3">
-                <HeartPulse size={24} />
-              </div>
-              <div>
-                <h1 className="font-bold text-gray-800 leading-tight font-mm text-lg tracking-tight">ပါရမီဆေးဆိုင်</h1>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Pharmacy System</p>
-              </div>
-            </div>
-            {/* Mobile Close Button */}
-            <button 
-              onClick={toggleSidebar}
-              className="md:hidden p-2 text-gray-400 hover:bg-red-50 hover:text-[#C8000C] rounded-lg transition-colors"
-            >
-              <X size={20} />
-            </button>
+        {/* Logo Section */}
+        <div className="h-20 flex items-center gap-3 px-6 border-b border-gray-100 bg-white">
+          <div className="w-10 h-10 bg-[#C8000C] rounded-xl flex items-center justify-center text-white shadow-lg shadow-red-600/20 shrink-0">
+            <HeartPulse size={24} strokeWidth={2.5} />
           </div>
+          <div>
+            <h1 className="font-bold text-lg text-gray-900 leading-none font-mm">ပါရမီဆေးဆိုင်</h1>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Pharmacy System</p>
+          </div>
+          <button 
+             onClick={toggleSidebar}
+             className="ml-auto md:hidden p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+          >
+             <X size={20} />
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1 scrollbar-hide">
-          <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 mt-4">Operations</p>
-          <NavItem to="/" icon={LayoutDashboard} label="Dashboard" subLabel="ဒက်ရှ်ဘုတ်" />
-          <NavItem to="/pos" icon={ShoppingCart} label="Point of Sale" subLabel="အရောင်းကောင်တာ" />
-          <NavItem to="/inventory" icon={Package} label="Inventory" subLabel="ကုန်ပစ္စည်းများ" />
-          <NavItem to="/expiry" icon={HeartPulse} label="Expiry Center" subLabel="သက်တမ်းကုန်ဆုံးမည့်စာရင်း" />
+        {/* Navigation */}
+        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-1 scrollbar-hide">
+          <NavItem to="/" icon={LayoutDashboard} label="Dashboard" subLabel="ခြုံငုံသုံးသပ်ချက်" />
+          <NavItem to="/pos" icon={ShoppingCart} label="POS Terminal" subLabel="အရောင်းကောင်တာ" />
           
-          <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 mt-8">Management</p>
-          <NavItem to="/distribution" icon={Truck} label="Distribution" subLabel="ဖြန့်ချိရေး" />
-          <NavItem to="/purchase" icon={ShoppingBag} label="Purchase" subLabel="အဝယ်ပိုင်း" />
-          <NavItem to="/finance" icon={CreditCard} label="Finance" subLabel="ငွေစာရင်း" />
-          <NavItem to="/customers" icon={Users} label="Customers" subLabel="ဖောက်သည်များ" />
-          <NavItem to="/settings" icon={Settings} label="Settings" subLabel="ပြင်ဆင်မှုများ" />
+          <div className="py-2">
+            <div className="h-[1px] bg-gray-100 mx-2 mb-2" />
+            <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Inventory</p>
+            <NavItem to="/stock-entry" icon={PlusCircle} label="Stock Entry" subLabel="ပစ္စည်းထည့်သွင်းရန်" />
+            <NavItem to="/inventory" icon={Package} label="Current Stock" subLabel="လက်ရှိ ပစ္စည်းများ" />
+            <NavItem to="/expiry" icon={Calendar} label="Expiry Center" subLabel="သက်တမ်းကုန်ဆုံးမှု" />
+          </div>
 
-          <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 mt-8">Tools</p>
-          <NavItem to="/scanner" icon={ScanLine} label="Scanner Utility" subLabel="ဘားကုဒ်စကင်ဖတ်စက်" />
+          <div className="py-2">
+             <div className="h-[1px] bg-gray-100 mx-2 mb-2" />
+             <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Management</p>
+             <NavItem to="/purchase" icon={ShoppingBag} label="Purchasing" subLabel="အဝယ်ပိုင်း" />
+             <NavItem to="/distribution" icon={Truck} label="Distribution" subLabel="ဖြန့်ချိရေး" />
+             <NavItem to="/finance" icon={BarChart3} label="Finance" subLabel="ငွေစာရင်း" />
+             <NavItem to="/customers" icon={Users} label="Customers" subLabel="ဖောက်သည်များ" />
+          </div>
+
+          <div className="py-2">
+            <div className="h-[1px] bg-gray-100 mx-2 mb-2" />
+            <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Tools</p>
+            <NavItem to="/scanner" icon={ScanLine} label="Scanner Utility" subLabel="စစ်ဆေးရေး စက်ကိရိယာ" />
+            <NavItem to="/settings" icon={Settings} label="Settings" subLabel="ဆက်တင်များ" />
+          </div>
         </div>
 
-        <div className="p-6 mt-auto shrink-0">
-          <div className="flex flex-col items-center justify-center gap-1">
-            <span className="text-xs font-medium text-slate-400">Powered by</span>
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#0060CE]"></div>
-              <span className="text-sm font-bold text-slate-700">A7 Business Systems</span>
-            </div>
-          </div>
+        {/* Footer User Profile */}
+        <div className="p-4 border-t border-gray-100 bg-gray-50/50">
+           <button 
+             onClick={logout}
+             className="flex items-center gap-3 w-full p-2 hover:bg-white hover:shadow-sm rounded-xl transition-all group"
+           >
+              <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0 border-2 border-white shadow-sm">
+                 <img src="https://ui-avatars.com/api/?name=Admin&background=random" alt="Admin" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1 text-left overflow-hidden">
+                 <p className="text-sm font-bold text-gray-800 truncate group-hover:text-[#C8000C] transition-colors">Kaung Kaung</p>
+                 <p className="text-[10px] font-medium text-gray-500 truncate">Administrator</p>
+              </div>
+              <LogOut size={18} className="text-gray-400 group-hover:text-red-500 transition-colors" />
+           </button>
         </div>
       </aside>
     </>
@@ -108,202 +124,88 @@ export const Sidebar = () => {
 };
 
 export const Header = () => {
-  const { user, logout } = useAuthStore();
   const { toggleSidebar } = useGlobalStore();
-  const { branches, currentBranchId, setBranch } = useBranchStore();
-  const { allOrders } = useDistributionStore();
-  const navigate = useNavigate();
+  const { branches, currentBranchId, setBranch, getCurrentBranch } = useBranchStore();
+  const { user } = useAuthStore();
   
-  const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const currentBranch = branches.find(b => b.id === currentBranchId) || branches[0];
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsBranchMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-     if (branches.length > 0 && !branches.find(b => b.id === currentBranchId)) {
-         setBranch(branches[0].id);
-     }
-  }, [branches, currentBranchId, setBranch]);
-
-  useEffect(() => {
-    if (!isBranchMenuOpen) setSearchTerm('');
-  }, [isBranchMenuOpen]);
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  }
-
-  const handleSwitchBranch = (branchId: string, branchName: string) => {
-    if (branchId === currentBranchId) {
-       setIsBranchMenuOpen(false);
-       return;
-    }
-    setIsLoading(true);
-    setIsBranchMenuOpen(false);
-    
-    setTimeout(() => {
-        setBranch(branchId);
-        setIsLoading(false);
-    }, 500);
-  };
-
-  const getBranchStats = (branchId: string) => {
-     const branchOrders = allOrders.filter(o => o.branchId === branchId);
-     return {
-        pending: branchOrders.filter(o => o.status === 'PENDING').length,
-     };
-  };
-
-  const filteredBranches = branches.filter(b => 
-    b.status === 'active' &&
-    (b.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-     b.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     (b.address && b.address.toLowerCase().includes(searchTerm.toLowerCase())))
-  );
+  const currentBranch = getCurrentBranch();
 
   return (
-    <>
-      {isLoading && (
-         <div className="fixed inset-0 z-[2000] bg-white/90 backdrop-blur-md flex items-center justify-center flex-col animate-in fade-in duration-300">
-            <div className="relative">
-              <div className="w-16 h-16 rounded-full border-4 border-slate-100 border-t-[#C8000C] animate-spin"></div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                 <Building2 size={24} className="text-slate-300" />
+    <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-20 shadow-sm/50">
+      <div className="flex items-center gap-4">
+        <button 
+          onClick={toggleSidebar}
+          className="p-2 -ml-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-all active:scale-95"
+        >
+          <Menu size={24} />
+        </button>
+        
+        {/* Branch Switcher */}
+        <div className="hidden md:flex items-center gap-3 pl-4 border-l border-gray-200">
+           <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Current Branch</span>
+              <div className="relative group">
+                 <button className="flex items-center gap-2 font-bold text-gray-800 hover:text-[#C8000C] transition-colors">
+                    <Building2 size={16} />
+                    <span>{currentBranch?.name || 'Select Branch'}</span>
+                    <ChevronDown size={14} className="text-gray-400 group-hover:text-[#C8000C]" />
+                 </button>
+                 
+                 {/* Dropdown */}
+                 <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all transform origin-top-left z-50">
+                    <p className="px-3 py-2 text-xs font-bold text-gray-400 uppercase">Switch Branch</p>
+                    {branches.map(branch => (
+                       <button 
+                         key={branch.id}
+                         onClick={() => setBranch(branch.id)}
+                         className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-between ${
+                            currentBranchId === branch.id 
+                            ? 'bg-red-50 text-[#C8000C]' 
+                            : 'text-gray-600 hover:bg-gray-50'
+                         }`}
+                       >
+                          <span>{branch.name}</span>
+                          {currentBranchId === branch.id && <Check size={14} />}
+                       </button>
+                    ))}
+                 </div>
               </div>
+           </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+         {/* Search Bar */}
+         <div className="hidden md:flex relative group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#C8000C] transition-colors" size={18} />
+            <input 
+              type="text" 
+              placeholder="Global Search..." 
+              className="w-64 pl-10 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm font-medium text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#C8000C]/20 focus:bg-white transition-all"
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 pointer-events-none">
+               <span className="px-1.5 py-0.5 rounded border border-gray-200 bg-white text-[10px] font-bold text-gray-400">⌘</span>
+               <span className="px-1.5 py-0.5 rounded border border-gray-200 bg-white text-[10px] font-bold text-gray-400">K</span>
             </div>
-            <h3 className="text-xl font-bold text-slate-800 mt-6">Switching Branch...</h3>
-            <p className="text-slate-500 mt-2">Loading environment for {branches.find(b => b.id === currentBranchId)?.name}</p>
          </div>
-      )}
 
-      {isBranchMenuOpen && (
-        <div className="fixed inset-0 bg-slate-900/10 backdrop-blur-[2px] z-[900] md:hidden" aria-hidden="true" />
-      )}
+         <div className="h-8 w-[1px] bg-gray-200 mx-2 hidden md:block"></div>
 
-      <header className="h-16 glass-panel sticky top-0 z-10 px-6 flex items-center justify-between transition-all duration-300 shadow-sm">
-        <div className="flex items-center gap-4">
-          <button onClick={toggleSidebar} className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-slate-800 transition-colors">
-            <Menu size={20} />
-          </button>
-          
-          <div className="relative group" ref={dropdownRef}>
-            <button 
-              onClick={() => setIsBranchMenuOpen(!isBranchMenuOpen)}
-              className={`flex items-center gap-3 px-3 py-1.5 bg-white/80 hover:bg-white rounded-xl border border-slate-200/80 hover:border-red-300 transition-all select-none ${isBranchMenuOpen ? 'ring-2 ring-red-500/10 border-red-400' : 'shadow-sm'}`}
-            >
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-50 to-red-100 border border-red-200 flex items-center justify-center text-[#C8000C] shadow-sm">
-                 <Building2 size={16} />
-              </div>
-              <div className="flex flex-col items-start leading-none gap-0.5">
-                <span className="hidden md:block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Current Branch</span>
-                <span className="font-bold font-mm text-slate-800 text-sm max-w-[140px] md:max-w-xs truncate text-left">{currentBranch?.name || 'Unknown Branch'}</span>
-              </div>
-              <ChevronDown size={14} className={`transition-transform duration-200 text-slate-400 ml-2 ${isBranchMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {isBranchMenuOpen && (
-              <div className="fixed inset-x-0 bottom-0 md:absolute md:top-full md:left-0 md:bottom-auto md:mt-2 w-full md:w-[420px] bg-white md:rounded-2xl rounded-t-2xl shadow-soft-xl border border-slate-100 z-[1000] flex flex-col max-h-[85vh] md:max-h-[600px] overflow-hidden animate-in slide-in-from-bottom-10 md:slide-in-from-top-2 fade-in duration-200">
-                <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-                   <div className="relative">
-                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                      <input 
-                        autoFocus
-                        type="text" 
-                        placeholder="Search branches..." 
-                        className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-red-500/5 focus:border-red-500 transition-all shadow-sm"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                      />
-                   </div>
-                </div>
-
-                <div className="overflow-y-auto max-h-[400px] p-2 space-y-1">
-                   {filteredBranches.map(branch => {
-                       const stats = getBranchStats(branch.id);
-                       const isActive = branch.id === currentBranchId;
-                       
-                       return (
-                          <button
-                             key={branch.id}
-                             onClick={() => handleSwitchBranch(branch.id, branch.name)}
-                             className={`w-full text-left p-3 rounded-xl flex items-center gap-4 transition-all border group relative ${
-                                isActive 
-                                  ? 'bg-red-50/50 border-red-100/50' 
-                                  : 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-100'
-                             }`}
-                          >
-                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors shadow-sm border border-transparent ${
-                                isActive ? 'bg-red-100 text-red-600 border-red-200' : 'bg-slate-100 text-slate-400 group-hover:bg-white group-hover:border-slate-200'
-                             }`}>
-                                {isActive ? <Check size={20} /> : <Building2 size={20} />}
-                             </div>
-                             
-                             <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                   <span className={`font-bold text-sm truncate ${isActive ? 'text-red-900' : 'text-slate-700'}`}>
-                                      {branch.name}
-                                   </span>
-                                </div>
-                                <div className="flex items-center gap-1.5 text-xs text-slate-500 truncate mt-1">
-                                   <MapPin size={12} className="shrink-0" />
-                                   <span className="truncate">{branch.address || 'No address set'}</span>
-                                </div>
-                             </div>
-                          </button>
-                       );
-                    })}
-                </div>
-
-                <div className="p-3 border-t border-slate-100 bg-slate-50">
-                   <button 
-                      onClick={() => { setIsBranchMenuOpen(false); navigate('/settings?tab=branches'); }}
-                      className="w-full flex items-center justify-center gap-2 py-3 px-4 text-xs font-bold text-slate-600 hover:text-white hover:bg-slate-800 rounded-xl transition-all border border-slate-200 hover:border-slate-800 hover:shadow-lg uppercase tracking-wide"
-                   >
-                      <Settings size={14} />
-                      Manage All Branches
-                   </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-3 pl-6 border-l border-slate-200 h-8">
-            <div className="text-right hidden md:block">
-              <p className="text-sm font-bold text-slate-800 leading-none">{user?.name || 'Guest'}</p>
-              <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider font-semibold">{user?.role || 'Viewer'}</p>
+         <button className="relative p-2.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-all">
+            <Bell size={20} />
+            <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+         </button>
+         
+         <div className="flex items-center gap-3 pl-2 border-l border-gray-200 md:border-none">
+            <div className="text-right hidden sm:block">
+               <p className="text-sm font-bold text-gray-800">{user?.name || 'Guest'}</p>
+               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 uppercase">{user?.role || 'Staff'}</span>
             </div>
-            <div className="relative group cursor-pointer">
-               <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden hover:ring-4 hover:ring-red-500/10 transition-all p-0.5">
-                 <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=random`} alt="Profile" className="w-full h-full object-cover rounded-[10px]" />
-               </div>
-               <div className="absolute top-full right-0 mt-3 w-56 bg-white rounded-2xl shadow-soft-xl border border-slate-100 py-1 hidden group-hover:block hover:block z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="px-5 py-4 border-b border-slate-50 mb-1">
-                    <p className="font-bold text-slate-800 text-sm">{user?.name}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{user?.email}</p>
-                  </div>
-                  <button onClick={handleLogout} className="w-full text-left px-5 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors">
-                     <LogOut size={16} /> Sign Out
-                  </button>
-               </div>
+            <div className="w-10 h-10 rounded-full bg-gray-200 ring-2 ring-white shadow-sm overflow-hidden">
+               <img src={user?.avatar || "https://ui-avatars.com/api/?name=User&background=random"} alt="Profile" className="w-full h-full object-cover" />
             </div>
-          </div>
-        </div>
-      </header>
-    </>
+         </div>
+      </div>
+    </header>
   );
 };

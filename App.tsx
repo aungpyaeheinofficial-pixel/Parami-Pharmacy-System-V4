@@ -1,11 +1,14 @@
+
 import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { useAuthStore } from './store';
+import { useAuthStore, useGlobalStore } from './store';
 import { Sidebar, Header } from './components/Layout';
+import ShortcutPanel from './components/ShortcutPanel';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import POS from './pages/POS';
 import Inventory from './pages/Inventory';
+import StockEntry from './pages/StockEntry';
 import Expiry from './pages/Expiry';
 import Distribution from './pages/Distribution';
 import Purchase from './pages/Purchase';
@@ -13,7 +16,6 @@ import Finance from './pages/Finance';
 import Customers from './pages/Customers';
 import Settings from './pages/Settings';
 import PharmacyScanner from './components/PharmacyScanner';
-import { useGlobalStore } from './store';
 
 const ProtectedLayout = () => {
   const { user } = useAuthStore();
@@ -38,11 +40,6 @@ const ProtectedLayout = () => {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       <Sidebar />
-      {/* 
-        Layout Logic:
-        - md:ml-[280px]: Pushes content on desktop when sidebar is fixed. Matches new sidebar width.
-        - ml-0: No margin on mobile; sidebar overlays content.
-      */}
       <div 
         className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
           isSidebarOpen ? 'md:ml-[280px]' : 'ml-0'
@@ -52,6 +49,9 @@ const ProtectedLayout = () => {
         <main className="flex-1 overflow-y-auto overflow-x-hidden">
           <Outlet />
         </main>
+        
+        {/* Floating Global Shortcut Panel */}
+        <ShortcutPanel />
       </div>
     </div>
   );
@@ -67,6 +67,7 @@ const App = () => {
           <Route path="/" element={<Dashboard />} />
           <Route path="/pos" element={<POS />} />
           <Route path="/inventory" element={<Inventory />} />
+          <Route path="/stock-entry" element={<StockEntry />} />
           <Route path="/expiry" element={<Expiry />} />
           <Route path="/distribution" element={<Distribution />} />
           <Route path="/purchase" element={<Purchase />} />

@@ -1,3 +1,4 @@
+
 export enum Role {
   ADMIN = 'ADMIN',
   MANAGER = 'MANAGER',
@@ -10,6 +11,62 @@ export enum StockStatus {
   LOW_STOCK = 'LOW_STOCK',
   OUT_OF_STOCK = 'OUT_OF_STOCK',
   EXPIRED = 'EXPIRED'
+}
+
+export type SyncStatus = 'PENDING' | 'SYNCED' | 'ERROR';
+
+// Unit Types for Myanmar Pharmacy Distribution
+export interface UnitType {
+  code: string;
+  nameEn: string;
+  nameMm: string;
+}
+
+export const UNIT_TYPES: UnitType[] = [
+  { code: 'TABLET', nameEn: 'Tablet', nameMm: 'လုံး' },
+  { code: 'CAPSULE', nameEn: 'Capsule', nameMm: 'ဆေးတောင့်' },
+  { code: 'STRIP', nameEn: 'Strip', nameMm: 'ကဒ်' },
+  { code: 'BLISTER', nameEn: 'Blister Pack', nameMm: 'ဘလစ်စတာ' },
+  { code: 'BOX', nameEn: 'Box', nameMm: 'သေတ္တာ' },
+  { code: 'BOTTLE', nameEn: 'Bottle', nameMm: 'ဗူး' },
+  { code: 'VIAL', nameEn: 'Vial', nameMm: 'ပုလင်း' },
+  { code: 'AMPOULE', nameEn: 'Ampoule', nameMm: 'လိပ်ပါ' },
+  { code: 'TUBE', nameEn: 'Tube', nameMm: 'ပြွန်' },
+  { code: 'SACHET', nameEn: 'Sachet', nameMm: 'အိတ်' },
+  { code: 'PACK', nameEn: 'Pack', nameMm: 'ထုပ်' }
+];
+
+export interface ScannedItem {
+  id: string;
+  gtin: string | null;
+  productName?: string;
+  batchNumber: string | null;
+  expiryDate: string | null;
+  serialNumber: string | null;
+  quantity: number;
+  unit?: string; // e.g., 'STRIP'
+  timestamp: number;
+  syncStatus: SyncStatus;
+  syncMessage?: string;
+  rawData: string;
+  type: string;
+  scannedBy: string;
+  // Verification Fields
+  verified?: boolean;
+  location?: string;
+  costPrice?: number;
+  sellingPrice?: number;
+}
+
+export interface SyncLog {
+  id: string;
+  scanId: string;
+  action: 'INSERT' | 'UPDATE';
+  productName: string;
+  oldQuantity: number;
+  newQuantity: number;
+  timestamp: string;
+  status: 'SUCCESS' | 'FAILED';
 }
 
 export interface Branch {
@@ -54,10 +111,12 @@ export interface Product {
   price: number;
   image: string;
   stockLevel: number;
+  unit: string; // Main tracking unit (e.g., 'STRIP')
   minStockLevel: number;
   batches: Batch[];
   requiresPrescription: boolean;
   branchId: string;
+  location?: string;
 }
 
 export interface Customer {
@@ -74,6 +133,16 @@ export interface CartItem extends Product {
   selectedBatchId?: string;
   quantity: number;
   discount: number;
+  // Enhanced Scanning Data
+  transaction_data?: {
+    scanned_batch: string | null;
+    scanned_expiry: string | null;
+    scanned_serial: string | null;
+    scanned_at: string;
+    raw_barcode: string;
+  };
+  warning_flags?: string[]; // 'EXPIRED', 'NEAR_EXPIRY'
+  manager_override?: boolean;
 }
 
 export interface Sale {
