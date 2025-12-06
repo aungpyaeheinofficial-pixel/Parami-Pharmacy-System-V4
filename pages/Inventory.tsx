@@ -1,437 +1,336 @@
-
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Filter, Download, Edit2, AlertCircle, Trash2, X, Save, Search, Image as ImageIcon, Upload, AlertTriangle, Loader2, Check } from 'lucide-react';
-import { Card, Button, Badge, Input } from '../components/UI';
-import { useProductStore } from '../store';
-import { Product, UNIT_TYPES } from '../types';
+import { Plus, Filter, Download, Edit2, Trash2, X, Save, Search, Image as ImageIcon, Check } from 'lucide-react';
+import { Card, Button, Input } from '../components/UI';
+
+// --- AWS IMPORTS ---
+import { generateClient } from 'aws-amplify/data';
+import type { Schema } from '../amplify/data/resource';
+
+// 1. Initialize Client
+const client = generateClient<Schema>();
+
+// 2. Hardcode units here to avoid import errors
+const UNIT_OPTIONS = ['Strip', 'Bottle', 'Box', 'Card', 'Vial', 'Tube'];
 
 const Inventory = () => {
-  const { products, addProduct, updateProduct, deleteProduct } = useProductStore();
+  const [products, setProducts] = useState<any[]>([]);
   const [searchParams] = useSearchParams();
   
-  // State for filtering
+  // Filters
   const [filterCategory, setFilterCategory] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Initialize filter from URL params
-  useEffect(() => {
-    const statusParam = searchParams.get('filter');
-    if (statusParam === 'low_stock') {
-      setFilterStatus('Low Stock');
-    } else {
-      setFilterStatus('All');
-    }
-  }, [searchParams]);
-
-  // State for Add/Edit Modal
+  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [currentProduct, setCurrentProduct] = useState<Partial<Product>>({});
-
-  // State for Delete Modal
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<Product | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Initialize with default values to prevent "controlled/uncontrolled" errors
+  const [currentProduct, setCurrentProduct] = useState<any>({
+    name: '', myanmarName: '', sku: '', category: 'Medicine', price: 0, unit: 'Strip', minStock: 10, description: ''
+  });
   const [successMsg, setSuccessMsg] = useState('');
 
-  // File Input Ref
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Delete State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Derived Data
-  const categories = useMemo<string[]>(() => {
-    const cats = new Set<string>(products.map(p => p.category));
-    return ['All', ...Array.from(cats)];
-  }, [products]);
+  // --- FETCH DATA ---
+  useEffect(() => {
+    fetchProducts();
+  }, []);
 
+  async function fetchProducts() {
+    try {
+      const { data: items } = await client.models.Product.list();
+      setProducts(items);
+    } catch (e) {
+      console.error("Error fetching products", e);
+    }
+  }
+
+  // --- FILTER LOGIC ---
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
-      const matchesSearch = product.nameEn.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            product.nameMm.includes(searchTerm) ||
-                            product.sku.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            (product.myanmarName || '').includes(searchTerm) ||
+                            (product.sku || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = filterCategory === 'All' || product.category === filterCategory;
-      const matchesStatus = filterStatus === 'All' || 
-                            (filterStatus === 'Low Stock' && product.stockLevel < product.minStockLevel) ||
-                            (filterStatus === 'In Stock' && product.stockLevel >= product.minStockLevel);
-
-      return matchesSearch && matchesCategory && matchesStatus;
+      return matchesSearch && matchesCategory;
     });
-  }, [products, searchTerm, filterCategory, filterStatus]);
+  }, [products, searchTerm, filterCategory]);
 
-  // Helper to get unit display
-  const getUnitDisplay = (unitCode: string) => {
-      const unit = UNIT_TYPES.find(u => u.code === unitCode);
-      return unit ? `${unit.nameMm} (${unit.nameEn})` : unitCode;
-  };
-
-  // Handlers
   const handleAddNew = () => {
     setIsEditMode(false);
     setCurrentProduct({
-      id: `p${Date.now()}`,
       sku: '',
-      nameEn: '',
-      nameMm: '',
-      genericName: '',
-      category: '',
+      name: '',
+      myanmarName: '',
+      category: 'Medicine',
       price: 0,
-      stockLevel: 0,
-      minStockLevel: 10,
-      requiresPrescription: false,
-      image: '',
-      batches: [],
-      unit: 'STRIP' // Default
+      unit: 'Strip',
+      minStock: 10, 
+      description: ''
     });
     setIsModalOpen(true);
   };
 
-  const handleEdit = (product: Product) => {
+  const handleEdit = (product: any) => {
     setIsEditMode(true);
-    setCurrentProduct({ ...product });
+    setCurrentProduct(product);
     setIsModalOpen(true);
   };
 
-  const handleRequestDelete = (e: React.MouseEvent, product: Product) => {
-    e.stopPropagation(); // Prevent triggering row clicks
-    if (isModalOpen) setIsModalOpen(false);
-    setItemToDelete(product);
-    setDeleteError(null);
-    setIsDeleteModalOpen(true);
-  };
-
-  const confirmDelete = () => {
-    if (!itemToDelete) return;
-    setIsDeleting(true);
-    setTimeout(() => {
-      deleteProduct(itemToDelete.id);
-      setIsDeleting(false);
-      setIsDeleteModalOpen(false);
-      setIsModalOpen(false);
-      setItemToDelete(null);
-      setSuccessMsg("Inventory item deleted successfully");
-      setTimeout(() => setSuccessMsg(""), 3000);
-    }, 1000);
-  };
-
-  const handleSave = (e: React.FormEvent) => {
+ // --- SAVE TO AWS (FIXED) ---
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentProduct.nameEn || !currentProduct.price) {
-      alert("Please fill in required fields");
+    
+    // 1. Validation
+    if (!currentProduct.name || !currentProduct.price) {
+      alert("Please fill in Name and Price");
       return;
     }
 
-    if (isEditMode && currentProduct.id) {
-      updateProduct(currentProduct.id, currentProduct);
-    } else {
-      addProduct({
-        ...currentProduct,
-        image: currentProduct.image || ''
-      } as Product);
-    }
-    setIsModalOpen(false);
-  };
+    try {
+      console.log("Attempting to save...", currentProduct); // Debug Log
 
-  const handleInputChange = (field: keyof Product, value: any) => {
-    setCurrentProduct(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        handleInputChange('image', reader.result as string);
+      // 2. Prepare data object safely
+      // Ensure numbers are actually numbers, not strings
+      const productData: any = {
+        name: currentProduct.name,
+        myanmarName: currentProduct.myanmarName,
+        sku: currentProduct.sku,
+        price: parseFloat(currentProduct.price),
+        category: currentProduct.category,
+        unit: currentProduct.unit,
+        minStock: parseInt(currentProduct.minStock || 0), 
+        description: currentProduct.description
       };
-      reader.readAsDataURL(file);
+
+      if (isEditMode && currentProduct.id) {
+        // --- UPDATE MODE ---
+        const { data: updatedItem, errors } = await client.models.Product.update({
+          id: currentProduct.id,
+          ...productData
+        });
+
+        if (errors) throw errors;
+
+        // Manual Screen Update (Replace the old item in the list)
+        setProducts(prev => prev.map(item => item.id === currentProduct.id ? updatedItem : item));
+        setSuccessMsg("Updated successfully");
+
+      } else {
+        // --- CREATE MODE ---
+        const { data: newItem, errors } = await client.models.Product.create(productData);
+        
+        if (errors) throw errors;
+
+        console.log("Created Item:", newItem); // Debug Log
+
+        // Manual Screen Update (Add new item to list immediately)
+        // This makes it appear instantly!
+        if (newItem) {
+           setProducts(prev => [newItem, ...prev]);
+        }
+        
+        setSuccessMsg("Saved successfully");
+      }
+      
+      setIsModalOpen(false);
+      setTimeout(() => setSuccessMsg(""), 3000);
+
+    } catch (error) {
+      console.error("FULL ERROR DETAILS:", error); // Check your Console (F12) if this happens!
+      alert("Failed to save. Open Console (F12) to see why.");
     }
   };
 
-  const triggerFileInput = () => {
-    fileInputRef.current?.click();
+  // --- DELETE ---
+  const handleRequestDelete = (e: React.MouseEvent, product: any) => {
+    e.stopPropagation();
+    setItemToDelete(product);
+    setIsDeleteModalOpen(true);
   };
 
-  const removeImage = () => {
-    handleInputChange('image', '');
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+    setIsDeleting(true);
+    try {
+      await client.models.Product.delete({ id: itemToDelete.id });
+      setSuccessMsg("Deleted successfully");
+      fetchProducts();
+    } catch (error) {
+      console.error("Error deleting:", error);
+      alert("Failed to delete.");
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteModalOpen(false);
+      setItemToDelete(null);
+      setTimeout(() => setSuccessMsg(""), 3000);
+    }
+  };
+
+  // Helper to handle input changes
+  const handleInputChange = (field: string, value: any) => {
+    setCurrentProduct((prev: any) => ({ ...prev, [field]: value }));
   };
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            Inventory Management
+            Inventory
             <span className="text-base font-normal text-slate-400 font-mm ml-2">ကုန်ပစ္စည်းများ</span>
           </h1>
-          <p className="text-slate-500 text-sm">Manage stock levels, units, and pricing.</p>
         </div>
-        
         {successMsg && (
-             <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
+             <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
                 <Check size={16} /> {successMsg}
              </div>
         )}
-
-        <div className="flex gap-3">
-          <Button variant="outline" className="gap-2 bg-white hidden sm:flex">
-            <Download size={18} /> Export
-          </Button>
-          <Button variant="primary" className="gap-2 shadow-lg shadow-parami/20" onClick={handleAddNew}>
+        <Button variant="primary" className="gap-2 shadow-lg" onClick={handleAddNew}>
             <Plus size={18} /> Add Product
-          </Button>
-        </div>
+        </Button>
       </div>
 
       <Card className="p-0 overflow-hidden border border-slate-200 shadow-sm">
-        {/* Filters Toolbar */}
-        <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row gap-4 items-center bg-slate-50/50">
-          <div className="relative w-full md:w-64">
+        {/* Search Bar */}
+        <div className="p-4 border-b border-slate-200 flex gap-4 bg-slate-50/50">
+          <div className="relative flex-1 max-w-md">
              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
              <input 
                type="text"
                placeholder="Search name, SKU..."
                value={searchTerm}
                onChange={(e) => setSearchTerm(e.target.value)}
-               className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-a7/20"
+               className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
              />
           </div>
-          <div className="relative w-full md:w-auto">
-            <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <select 
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="w-full md:w-auto pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-a7/20 appearance-none"
-            >
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </div>
-          <div className="relative w-full md:w-auto">
-            <select 
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full md:w-auto px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-a7/20"
-            >
-              <option value="All">All Status</option>
-              <option value="Low Stock">Low Stock</option>
-              <option value="In Stock">In Stock</option>
-            </select>
-          </div>
-          <div className="hidden md:block flex-1"></div>
-          <div className="text-sm text-slate-500 w-full md:w-auto text-right">Showing <span className="font-semibold text-slate-900">{filteredProducts.length}</span> products</div>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider font-semibold border-b border-slate-200">
-                <th className="px-6 py-4">Product Info</th>
-                <th className="px-6 py-4">Category</th>
-                <th className="px-6 py-4">Stock Level (Unit)</th>
-                <th className="px-6 py-4">Price (MMK)</th>
-                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4">Product</th>
+                <th className="px-6 py-4">Info</th>
+                <th className="px-6 py-4">Min Stock</th>
+                <th className="px-6 py-4">Price</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredProducts.map((product) => {
-                 const unitDisplay = getUnitDisplay(product.unit || 'STRIP');
-                 return (
-                    <tr key={product.id} className="hover:bg-slate-50/80 transition-colors group cursor-pointer" onClick={() => handleEdit(product)}>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
-                            {product.image ? (
-                               <img src={product.image} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                               <ImageIcon size={20} className="text-slate-400" />
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-800 text-sm">{product.nameEn}</p>
-                            <p className="text-xs text-slate-500 font-mm">{product.nameMm}</p>
-                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">SKU: {product.sku}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-600">
-                        <span className="bg-slate-100 px-2 py-1 rounded text-xs font-medium border border-slate-200">{product.category}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                           <div className="flex items-center gap-2 text-sm font-mono font-bold text-slate-800">
-                             {product.stockLevel} 
-                             {product.stockLevel < product.minStockLevel && <AlertCircle size={14} className="text-red-500" />}
-                           </div>
-                           <span className="text-xs text-slate-500 font-mm">{unitDisplay}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-800">
-                        {product.price.toLocaleString()} 
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge variant={product.stockLevel < product.minStockLevel ? 'danger' : 'success'}>
-                          {product.stockLevel < product.minStockLevel ? 'Low Stock' : 'In Stock'}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button onClick={(e) => { e.stopPropagation(); handleEdit(product); }} className="p-1.5 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg transition-colors" title="Edit">
-                            <Edit2 size={16} />
-                          </button>
-                          <button 
-                            onClick={(e) => handleRequestDelete(e, product)} 
-                            className="relative z-10 p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition-colors" 
-                            title="Delete"
-                          >
+              {filteredProducts.map((product) => (
+                <tr key={product.id} className="hover:bg-slate-50/80 cursor-pointer" onClick={() => handleEdit(product)}>
+                  <td className="px-6 py-4">
+                    <div>
+                        <p className="font-medium text-slate-800 text-sm">{product.name}</p>
+                        <p className="text-xs text-slate-500 font-mm">{product.myanmarName}</p>
+                        <p className="text-[10px] text-slate-400 font-mono">SKU: {product.sku}</p>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    <span className="block font-medium">{product.category}</span>
+                    <span className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{product.unit || 'Unit'}</span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    {product.minStock || '-'}
+                  </td>
+                  <td className="px-6 py-4 text-sm font-medium text-slate-800">
+                    {product.price?.toLocaleString()} Ks
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                        <button onClick={(e) => handleRequestDelete(e, product)} className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded">
                             <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                 );
-              })}
-              {filteredProducts.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
-                    No products found matching your criteria.
+                        </button>
+                    </div>
                   </td>
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
         </div>
       </Card>
 
-      {/* Add/Edit Product Modal */}
+      {/* MODAL FORM */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-              
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                 <div>
-                   <h3 className="font-bold text-xl text-slate-800">{isEditMode ? 'Edit Product' : 'Add New Product'}</h3>
-                   <p className="text-xs text-slate-500">{isEditMode ? 'Update product details and stock' : 'Enter details for the new item'}</p>
-                 </div>
-                 <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 transition-colors">
-                    <X size={20} />
-                 </button>
+                 <h3 className="font-bold text-xl text-slate-800">{isEditMode ? 'Edit Product' : 'Add New Product'}</h3>
+                 <button onClick={() => setIsModalOpen(false)}><X size={20} /></button>
               </div>
 
-              <div className="p-6 overflow-y-auto">
-                 <form id="productForm" onSubmit={handleSave} className="space-y-6">
-                    <div className="space-y-4">
-                       <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2 mb-4">Basic Information</h4>
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <Input 
-                            label="Product Name (English)" 
-                            required
-                            placeholder="e.g., Paracetamol 500mg"
-                            value={currentProduct.nameEn || ''}
-                            onChange={(e: any) => handleInputChange('nameEn', e.target.value)}
-                          />
-                          <Input 
-                            label="Product Name (Myanmar)" 
-                            placeholder="e.g., ပါရာစီတမော"
-                            className="font-mm"
-                            value={currentProduct.nameMm || ''}
-                            onChange={(e: any) => handleInputChange('nameMm', e.target.value)}
-                          />
-                          <Input 
-                            label="SKU / Barcode" 
-                            placeholder="SCAN-001"
-                            value={currentProduct.sku || ''}
-                            onChange={(e: any) => handleInputChange('sku', e.target.value)}
-                          />
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1.5">Unit Type</label>
-                            <select 
-                                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mm"
-                                value={currentProduct.unit || 'STRIP'}
-                                onChange={(e) => handleInputChange('unit', e.target.value)}
-                            >
-                                {UNIT_TYPES.map(u => (
-                                    <option key={u.code} value={u.code}>{u.nameMm} ({u.nameEn})</option>
-                                ))}
-                            </select>
-                          </div>
-                       </div>
+              <div className="p-6 overflow-y-auto space-y-4">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input label="Name (English)" required value={currentProduct.name} onChange={(e: any) => handleInputChange('name', e.target.value)} />
+                    <Input label="Name (Myanmar)" value={currentProduct.myanmarName} onChange={(e: any) => handleInputChange('myanmarName', e.target.value)} />
+                    <Input label="SKU / Barcode" value={currentProduct.sku} onChange={(e: any) => handleInputChange('sku', e.target.value)} />
+                    
+                    {/* Category Dropdown */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                        <select className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20" 
+                                value={currentProduct.category} 
+                                onChange={(e) => handleInputChange('category', e.target.value)}>
+                            <option value="Medicine">Medicine</option>
+                            <option value="Supplement">Supplement</option>
+                            <option value="Equipment">Equipment</option>
+                        </select>
                     </div>
 
-                    <div className="space-y-4 pt-2">
-                       <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2 mb-4">Stock & Pricing</h4>
-                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <Input 
-                            label="Selling Price (MMK)" 
-                            type="number"
-                            required
-                            min="0"
-                            placeholder="0"
-                            value={currentProduct.price || 0}
-                            onChange={(e: any) => handleInputChange('price', parseInt(e.target.value) || 0)}
-                          />
-                          <Input 
-                            label="Current Stock" 
-                            type="number"
-                            min="0"
-                            required
-                            placeholder="0"
-                            value={currentProduct.stockLevel || 0}
-                            onChange={(e: any) => handleInputChange('stockLevel', parseInt(e.target.value) || 0)}
-                          />
-                          <Input 
-                            label="Min. Alert Level" 
-                            type="number"
-                            min="0"
-                            placeholder="10"
-                            value={currentProduct.minStockLevel || 0}
-                            onChange={(e: any) => handleInputChange('minStockLevel', parseInt(e.target.value) || 0)}
-                          />
-                       </div>
+                    {/* Unit Dropdown */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Unit Type</label>
+                        <select className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20" 
+                                value={currentProduct.unit} 
+                                onChange={(e) => handleInputChange('unit', e.target.value)}>
+                            {UNIT_OPTIONS.map(u => (
+                                <option key={u} value={u}>{u}</option>
+                            ))}
+                        </select>
                     </div>
 
-                    {/* Image Section Omitted for Brevity (Same as before) */}
-                 </form>
+                    <Input label="Min Stock Level" type="number" value={currentProduct.minStock} onChange={(e: any) => handleInputChange('minStock', e.target.value)} />
+                    <Input label="Price" type="number" required value={currentProduct.price} onChange={(e: any) => handleInputChange('price', e.target.value)} />
+                 </div>
+
+                 {/* Description */}
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                    <textarea 
+                        className="w-full p-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20" 
+                        rows={3}
+                        value={currentProduct.description}
+                        onChange={(e) => handleInputChange('description', e.target.value)}
+                    ></textarea>
+                 </div>
               </div>
 
-              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-between gap-3">
-                 <div>
-                   {isEditMode && currentProduct.id && (
-                     <Button 
-                        variant="danger" 
-                        type="button" 
-                        onClick={(e: any) => handleRequestDelete(e, currentProduct as Product)}
-                    >
-                        <Trash2 size={18} /> Delete
-                     </Button>
-                   )}
-                 </div>
-                 <div className="flex gap-3">
-                   <Button variant="outline" type="button" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-                   <Button variant="primary" type="submit" form="productForm" className="shadow-lg shadow-parami/20">
-                      <Save size={18} /> {isEditMode ? 'Update Product' : 'Save Product'}
+              <div className="p-6 bg-slate-50 border-t flex justify-end gap-3">
+                   <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+                   <Button variant="primary" onClick={handleSave}>
+                      <Save size={18} className="mr-2"/> {isEditMode ? 'Update' : 'Save'}
                    </Button>
-                 </div>
               </div>
-
            </div>
         </div>
       )}
 
-      {/* Delete Confirmation Modal (Same as before) */}
-      {isDeleteModalOpen && itemToDelete && (
+      {/* Delete Modal */}
+      {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-           {/* ... Delete Modal Content ... */}
-           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 text-center">
-                <h3 className="text-xl font-bold mb-2">Confirm Delete</h3>
-                <p className="mb-6">Delete {itemToDelete.nameEn}?</p>
+           <div className="bg-white w-full max-w-md rounded-2xl p-6 text-center">
+                <h3 className="text-xl font-bold mb-4">Confirm Delete</h3>
                 <div className="flex gap-2 justify-center">
                     <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
-                    <Button variant="danger" onClick={confirmDelete}>Delete</Button>
+                    <Button variant="danger" onClick={confirmDelete} disabled={isDeleting}>
+                      {isDeleting ? "Deleting..." : "Delete"}
+                    </Button>
                 </div>
            </div>
         </div>

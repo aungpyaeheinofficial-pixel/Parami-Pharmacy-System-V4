@@ -11,21 +11,32 @@ const schema = a.schema({
     stocks: a.hasMany('ProductStock', 'branchId'),
     staff: a.hasMany('StaffProfile', 'branchId'),
     sales: a.hasMany('Sale', 'branchId'),
+    batches: a.hasMany('ProductBatch', 'branchId'),
+    purchaseOrders: a.hasMany('PurchaseOrder', 'branchId'),
   }).authorization(allow => [allow.publicApiKey()]),
 
   /* ---------------------------
-     PRODUCTS & BATCHES
+     PRODUCTS (Updated with Unit/MinStock)
   ----------------------------*/
   Product: a.model({
     name: a.string().required(),
     myanmarName: a.string(),
-    sku: a.string(), // Unique logic is handled in code or constraints
+    sku: a.string(),
     category: a.string(),
     price: a.float(),
     imageUrl: a.string(),
+    
+    // --- NEW FIELDS ---
+    unit: a.string(),
+    minStock: a.integer(),
+    description: a.string(),
+    // ------------------
+
     // Relationships
     batches: a.hasMany('ProductBatch', 'productId'),
     stocks: a.hasMany('ProductStock', 'productId'),
+    purchaseItems: a.hasMany('PurchaseItem', 'productId'),
+    saleItems: a.hasMany('SaleItem', 'productId'),
   }).authorization(allow => [allow.publicApiKey()]),
 
   ProductBatch: a.model({
@@ -33,11 +44,10 @@ const schema = a.schema({
     expiryDate: a.date(),
     quantity: a.integer(),
     costPrice: a.float(),
-    // Relationships
     productId: a.id(),
     product: a.belongsTo('Product', 'productId'),
     branchId: a.id(),
-    branch: a.belongsTo('Branch', 'branchId'), // Knowing which branch holds this batch
+    branch: a.belongsTo('Branch', 'branchId'),
   }).authorization(allow => [allow.publicApiKey()]),
 
   /* ---------------------------
@@ -45,7 +55,6 @@ const schema = a.schema({
   ----------------------------*/
   ProductStock: a.model({
     currentStock: a.integer(),
-    // Relationships
     productId: a.id().required(),
     product: a.belongsTo('Product', 'productId'),
     branchId: a.id().required(),
@@ -69,7 +78,6 @@ const schema = a.schema({
     paymentType: a.enum(['CASH', 'CREDIT']),
     orderDate: a.date(),
     totalCost: a.float(),
-    // Relationships
     supplierId: a.id(),
     supplier: a.belongsTo('Supplier', 'supplierId'),
     branchId: a.id(),
@@ -80,7 +88,6 @@ const schema = a.schema({
   PurchaseItem: a.model({
     quantity: a.integer(),
     costPrice: a.float(),
-    // Relationships
     poId: a.id(),
     purchaseOrder: a.belongsTo('PurchaseOrder', 'poId'),
     productId: a.id(),
@@ -88,25 +95,20 @@ const schema = a.schema({
   }).authorization(allow => [allow.publicApiKey()]),
 
   /* ---------------------------
-     CUSTOMERS & LOYALTY
+     CUSTOMERS & SALES
   ----------------------------*/
   Customer: a.model({
     name: a.string(),
     phone: a.string(),
     points: a.integer(),
-    // Relationships
     sales: a.hasMany('Sale', 'customerId'),
   }).authorization(allow => [allow.publicApiKey()]),
 
-  /* ---------------------------
-     SALES (Added this for you)
-  ----------------------------*/
   Sale: a.model({
     invoiceNumber: a.string(),
     totalAmount: a.float(),
     soldAt: a.datetime(),
     paymentMethod: a.enum(['CASH', 'KBZPAY', 'WAVEPAY']),
-    // Relationships
     customerId: a.id(),
     customer: a.belongsTo('Customer', 'customerId'),
     branchId: a.id(),
@@ -117,7 +119,6 @@ const schema = a.schema({
   SaleItem: a.model({
     quantity: a.integer(),
     priceAtSale: a.float(),
-    // Relationships
     saleId: a.id(),
     sale: a.belongsTo('Sale', 'saleId'),
     productId: a.id(),
@@ -125,13 +126,12 @@ const schema = a.schema({
   }).authorization(allow => [allow.publicApiKey()]),
 
   /* ---------------------------
-     STAFF PROFILE (Replaces Users Table)
+     STAFF
   ----------------------------*/
   StaffProfile: a.model({
-    email: a.string(), // Links to Cognito
+    email: a.string(),
     fullName: a.string(),
     role: a.enum(['ADMIN', 'STAFF']),
-    // Relationships
     branchId: a.id(),
     branch: a.belongsTo('Branch', 'branchId'),
   }).authorization(allow => [allow.publicApiKey()]),

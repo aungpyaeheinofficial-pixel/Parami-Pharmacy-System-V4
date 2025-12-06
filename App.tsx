@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore, useGlobalStore } from './store';
@@ -16,6 +15,13 @@ import Finance from './pages/Finance';
 import Customers from './pages/Customers';
 import Settings from './pages/Settings';
 import PharmacyScanner from './components/PharmacyScanner';
+
+// --- ADDED: Amplify Configuration ---
+import { Amplify } from 'aws-amplify';
+import outputs from './amplify_outputs.json'; // Note: Single dot ./
+
+Amplify.configure(outputs);
+// ------------------------------------
 
 const ProtectedLayout = () => {
   const { user } = useAuthStore();
